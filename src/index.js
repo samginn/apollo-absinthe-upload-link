@@ -1,75 +1,75 @@
-import { HttpLink } from 'apollo-link-http'
-import { ApolloLink, concat } from 'apollo-link'
-import { print } from 'graphql/language/printer'
-import request from './request'
-import extractFiles from './extractFiles'
-import { isObject } from './validators'
-import { parseAndCheckHttpResponse } from 'apollo-link-http-common'
-import { Observable } from 'apollo-link'
+import { BatchHttpLink } from "apollo-link-batch-http";
+import { ApolloLink, concat } from "apollo-link";
+import { print } from "graphql/language/printer";
+import request from "./request";
+import extractFiles from "./extractFiles";
+import { isObject } from "./validators";
+import { parseAndCheckHttpResponse } from "apollo-link-http-common";
+import { Observable } from "apollo-link";
 
 export const createUploadMiddleware = ({ uri, headers, fetch, credentials }) =>
   new ApolloLink((operation, forward) => {
-    if (typeof FormData !== 'undefined' && isObject(operation.variables)) {
-      const { variables, files } = extractFiles(operation.variables)
+    if (typeof FormData !== "undefined" && isObject(operation.variables)) {
+      const { variables, files } = extractFiles(operation.variables);
 
       if (files.length > 0) {
-        const context = operation.getContext()
-        const { headers: contextHeaders } = context
-        const formData = new FormData()
+        const context = operation.getContext();
+        const { headers: contextHeaders } = context;
+        const formData = new FormData();
 
-        formData.append('query', print(operation.query))
-        formData.append('variables', JSON.stringify(variables))
-        files.forEach(({ name, file }) => formData.append(name, file))
+        formData.append("query", print(operation.query));
+        formData.append("variables", JSON.stringify(variables));
+        files.forEach(({ name, file }) => formData.append(name, file));
 
         let options = {
-          method: 'POST',
+          method: "POST",
           headers: Object.assign({}, contextHeaders, headers),
           body: formData,
           credentials,
-        }
+        };
 
         // add context.fetchOptions to fetch options
-        options = Object.assign(context.fetchOptions || {}, options)
+        options = Object.assign(context.fetchOptions || {}, options);
 
         // is there a custom fetch? then use it
         if (fetch) {
-          return new Observable(observer => {
+          return new Observable((observer) => {
             fetch(uri, options)
-              .then(response => {
-                operation.setContext({ response })
-                return response
+              .then((response) => {
+                operation.setContext({ response });
+                return response;
               })
               .then(parseAndCheckHttpResponse(operation))
-              .then(result => {
+              .then((result) => {
                 // we have data and can send it to back up the link chain
-                observer.next(result)
-                observer.complete()
-                return result
+                observer.next(result);
+                observer.complete();
+                return result;
               })
-              .catch(err => {
+              .catch((err) => {
                 if (err.result && err.result.errors && err.result.data) {
-                  observer.next(err.result)
+                  observer.next(err.result);
                 }
-                observer.error(err)
-              })
-          })
+                observer.error(err);
+              });
+          });
         } else {
-          const withCredentials = credentials === 'include'
+          const withCredentials = credentials === "include";
           return request({
             uri,
             body: formData,
             headers: Object.assign({}, contextHeaders, headers),
             withCredentials,
             crossDomain: withCredentials,
-          })
+          });
         }
       }
     }
 
-    return forward(operation)
-  })
+    return forward(operation);
+  });
 
-export const createLink = opts =>
-  concat(createUploadMiddleware(opts), new HttpLink(opts))
+export const createLink = (opts) =>
+  concat(createUploadMiddleware(opts), new BatchHttpLink(opts));
 
-export { ReactNativeFile } from './validators'
+export { ReactNativeFile } from "./validators";
